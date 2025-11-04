@@ -9,6 +9,7 @@
 #include <zephyr/dt-bindings/adc/nrf-saadc-v3.h>
 #include <zephyr/dt-bindings/adc/nrf-saadc-nrf54l.h>
 #include <zephyr/dt-bindings/adc/nrf-saadc-haltium.h>
+#include <zephyr/dt-bindings/adc/nrf-saadc-nrf7120.h>
 #include <zephyr/linker/devicetree_regions.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/irq.h>
@@ -87,7 +88,23 @@ static const uint32_t saadc_psels[NRF_SAADC_AIN3 + 1] = {
 	[NRF_SAADC_AIN2] = NRF_PIN_PORT_TO_PIN_NUMBER(6U, 1),
 	[NRF_SAADC_AIN3] = NRF_PIN_PORT_TO_PIN_NUMBER(7U, 1),
 };
-#endif
+#elif defined(NRF7120_ENGA_XXAA)
+static const uint32_t saadc_psels[NRF_SAADC_VBAT + 1] = {
+	[NRF_SAADC_AIN0]    = NRF_PIN_PORT_TO_PIN_NUMBER(0U, 0),
+	[NRF_SAADC_AIN1]    = NRF_PIN_PORT_TO_PIN_NUMBER(1U, 0),
+	[NRF_SAADC_AIN2]    = NRF_PIN_PORT_TO_PIN_NUMBER(2U, 0),
+	[NRF_SAADC_AIN3]    = NRF_PIN_PORT_TO_PIN_NUMBER(3U, 0),
+	[NRF_SAADC_AIN4]    = NRF_PIN_PORT_TO_PIN_NUMBER(4U, 0),
+	[NRF_SAADC_AIN5]    = NRF_PIN_PORT_TO_PIN_NUMBER(6U, 0),
+	[NRF_SAADC_AIN6]    = NRF_PIN_PORT_TO_PIN_NUMBER(7U, 0),
+	[NRF_SAADC_AIN7]    = NRF_PIN_PORT_TO_PIN_NUMBER(8U, 0),
+	[NRF_SAADC_AIN8]    = NRF_PIN_PORT_TO_PIN_NUMBER(0U, 4),
+	[NRF_SAADC_AIN9]    = NRF_PIN_PORT_TO_PIN_NUMBER(1U, 4),
+	[NRF_SAADC_AIN10]   = NRF_PIN_PORT_TO_PIN_NUMBER(2U, 4),
+	[NRF_SAADC_AIN11]   = NRF_PIN_PORT_TO_PIN_NUMBER(3U, 4),
+	[NRF_SAADC_AIN12]   = NRF_PIN_PORT_TO_PIN_NUMBER(4U, 4),
+	[NRF_SAADC_AIN13]   = NRF_PIN_PORT_TO_PIN_NUMBER(5U, 4),
+};
 
 #else
 BUILD_ASSERT((NRF_SAADC_AIN0 == NRF_SAADC_INPUT_AIN0) &&
@@ -106,6 +123,7 @@ BUILD_ASSERT((NRF_SAADC_AIN0 == NRF_SAADC_INPUT_AIN0) &&
 #endif
 	     1,
 	     "Definitions from nrf-adc.h do not match those from nrf_saadc.h");
+#endif
 #endif
 
 struct driver_data {
@@ -207,7 +225,7 @@ static int input_assign(nrf_saadc_input_t *pin_p,
 
 	if (channel_cfg->differential) {
 		if (channel_cfg->input_negative > ARRAY_SIZE(saadc_psels) ||
-		    (IS_ENABLED(CONFIG_NRF_PLATFORM_HALTIUM) &&
+		    ((IS_ENABLED(CONFIG_NRF_PLATFORM_HALTIUM) || IS_ENABLED(NRF7120_ENGA_XXAA)) &&
 		     (channel_cfg->input_positive > NRF_SAADC_AIN7) !=
 		     (channel_cfg->input_negative > NRF_SAADC_AIN7))) {
 			LOG_ERR("Invalid analog negative input number: %d",
@@ -839,12 +857,14 @@ static DEVICE_API(adc, adc_nrfx_driver_api) = {
 	.ref_internal  = 900,
 #elif defined(CONFIG_NRF_PLATFORM_HALTIUM)
 	.ref_internal  = 1024,
+#elif defined(NRF7120_ENGA_XXAA)
+	.ref_internal  = 1024,
 #else
 	.ref_internal  = 600,
 #endif
 };
 
-#if defined(CONFIG_NRF_PLATFORM_HALTIUM)
+#if defined(CONFIG_NRF_PLATFORM_HALTIUM) || defined(NRF7120_ENGA_XXAA)
 /* AIN8-AIN14 inputs are on 3v3 GPIO port and they cannot be mixed with other
  * analog inputs (from 1v8 ports) in differential mode.
  */
