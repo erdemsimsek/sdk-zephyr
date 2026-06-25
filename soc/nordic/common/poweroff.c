@@ -33,6 +33,13 @@
 void z_sys_poweroff(void)
 {
 #if defined(CONFIG_TFM_NRF_SYSTEM_OFF_SERVICE)
+#if defined(CONFIG_RETAINED_MEM_NRF_RAM_CTRL)
+	/* Register the DT-defined retained regions with the secure RAM-control
+	 * service; the System OFF service re-applies them after clearing all
+	 * retention, just before entering System OFF.
+	 */
+	(void)z_nrf_retained_mem_retention_apply();
+#endif
 	tfm_platform_system_off();
 #else
 
