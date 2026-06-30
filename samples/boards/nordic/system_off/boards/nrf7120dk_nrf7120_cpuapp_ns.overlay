@@ -1,0 +1,50 @@
+/*
+ * Copyright (c) 2026 Nordic Semiconductor ASA
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/*
+ * Non-secure variant: carve a 4K retained-RAM region out of the non-secure SRAM.
+ * NS RAM granted by TF-M is 884K (0x20020000..0x200FCFFF); the top of the DT
+ * sram0_ns node is the MPC-reserved region and is NOT non-secure accessible. So
+ * place the retained region at 0x200FC000 (the top of the accessible NS window,
+ * ending at NS_DATA_LIMIT 0x200FCFFF) and shrink sram0_ns / sram03_ns below it.
+ *
+ * The region sits outside the kernel's sram0_ns MPU mapping, so it needs its own
+ * non-secure MPU region (zephyr,memory-attr) — otherwise NS reads/writes fault.
+ */
+
+#include <zephyr/dt-bindings/memory-attr/memory-attr-arm.h>
+
+/ {
+	sram_ret: memory@200fc000 {
+		compatible = "zephyr,memory-region", "mmio-sram";
+		reg = <0x200fc000 DT_SIZE_K(4)>;
+		zephyr,memory-region = "RetainedMem";
+		zephyr,memory-attr = <DT_MEM_ARM(ATTR_MPU_RAM)>;
+		status = "okay";
+
+		retainedmem0: retainedmem {
+			compatible = "zephyr,retained-ram";
+			status = "okay";
+		};
+	};
+
+	aliases {
+		retainedmemdevice = &retainedmem0;
+	};
+};
+
+/* App RAM ends at 0x200FC000 (880K of NS RAM); the retained region occupies the
+ * next 4K up to NS_DATA_LIMIT (0x200FCFFF).
+ */
+&sram0_ns {
+	reg = <0x20000 DT_SIZE_K(880)>;
+	ranges = <0x0 0x20000 DT_SIZE_K(880)>;
+};
+
+&sram03_ns {
+	reg = <0xc0000 DT_SIZE_K(112)>;
+	ranges = <0x0 0xc0000 DT_SIZE_K(112)>;
+};

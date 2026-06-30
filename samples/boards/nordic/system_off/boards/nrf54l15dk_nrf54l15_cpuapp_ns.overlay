@@ -1,0 +1,23 @@
+/*
+ * Copyright (c) 2026 Nordic Semiconductor ASA
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/*
+ * Non-secure (TF-M) variant.
+ *
+ * NOTE on retained RAM: this build does NOT carve a retained_mem region above
+ * sram0_ns. Measured on silicon, a region carved above sram0_ns is outside the
+ * kernel's MPU coverage and the non-secure app faults (MPU Data Access
+ * Violation) when it touches it - the accessible window tracks sram0_ns's top
+ * exactly. Instead the sample stores its retained state in a __noinit variable
+ * inside sram0_ns (CONFIG_APP_RETAINED_NOINIT=y), which is MPU-covered, and the
+ * secure RAM-control service keeps the RAM retained across System OFF.
+ *
+ * So there is nothing to add to the device tree here; sram0_ns keeps its full
+ * board-default size. The TF-M service Kconfigs live in the matching .conf.
+ */
+
+/ {
+};

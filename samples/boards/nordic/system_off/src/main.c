@@ -19,6 +19,54 @@
 #include <zephyr/sys/util.h>
 #include <zephyr/drivers/timer/system_timer.h>
 
+#if defined(CONFIG_APP_POWER_DOWN_RAM)
+#include <ram_pwrdn.h>
+#endif
+
+#if defined(CONFIG_BUILD_WITH_TFM)
+#include <tfm/tfm_ioctl_api.h>
+
+/* nRF54L15: 8 x 32 KiB RAM sections (use 32 for nRF7120). */
+#define RAM_CTRL_SECTIONS 8
+
+static void dump_ram_ctrl(const char *when)
+{
+	uint32_t control = 0;
+	uint32_t ret = 0;
+	uint32_t ret2 = 0;
+	uint32_t planned = 0;
+	int rc = nrf_ram_ctrl_svc_dump(&control, &ret, &ret2, &planned);
+
+	if (rc != 0) {
+		printf("RAM-ctrl dump failed (%d)\n", rc);
+		return;
+	}
+
+	/* "planned" is the secure cache: which sections WILL be retained at System
+	 * OFF. The default is none; only sections the app requested are set. RET
+	 * itself reads its reset value while running - it is applied at System OFF.
+	 */
+	printf("MEMCONF %s: CONTROL=0x%08x RET=0x%08x RET2=0x%08x PLANNED=0x%08x\n",
+	       when, control, ret, ret2, planned);
+	for (int i = 0; i < RAM_CTRL_SECTIONS; i++) {
+		printf("  sec%d @0x%08x powered=%u ret2=%u retain_at_off=%u\n", i,
+		       0x20000000u + (i * 0x8000u),
+		       (control >> i) & 1u, (ret2 >> i) & 1u, (planned >> i) & 1u);
+	}
+}
+
+/* Request that the 32 KiB RAM section holding the given object be retained
+ * across System OFF (everything else is dropped to save power). Returns the
+ * secure service result.
+ */
+static int retain_section_of(const void *obj)
+{
+	uintptr_t sec = (uintptr_t)obj & ~(0x8000u - 1u); /* 32 KiB-align down */
+
+	return nrf_ram_ctrl_svc_retention_set(sec, 0x8000u, true);
+}
+#endif
+
 #define NON_WAKEUP_RESET_REASON (RESET_PIN | RESET_SOFTWARE | RESET_POR | RESET_DEBUG)
 
 #if defined(CONFIG_GRTC_WAKEUP_ENABLE)
@@ -77,6 +125,12 @@ int main(void)
 	}
 
 	if (IS_ENABLED(CONFIG_APP_USE_RETAINED_MEM)) {
+#if defined(CONFIG_BUILD_WITH_TFM)
+		/* Show MEMCONF retention state for the section holding the
+		 * retained .noinit variable (powered=CONTROL, retained=RET).
+		 */
+		dump_ram_ctrl("at boot");
+#endif
 		bool retained_ok = retained_validate();
 
 		if (reset_cause & NON_WAKEUP_RESET_REASON) {
@@ -94,6 +148,17 @@ int main(void)
 		printf("Boot count: %u\n", retained.boots);
 		printf("Off count: %u\n", retained.off_count);
 		printf("Active Ticks: %" PRIu64 "\n", retained.uptime_sum);
+
+#if defined(CONFIG_BUILD_WITH_TFM) && defined(CONFIG_APP_RETAINED_NOINIT)
+		/* Request retention for the section holding the .noinit data. Every
+		 * other RAM section is dropped at System OFF (power saving); only this
+		 * one survives. The cache is rebuilt every boot (cold start).
+		 */
+		int rr = retain_section_of(&retained);
+
+		printf("Requested retention for .noinit section (rc=%d)\n", rr);
+		dump_ram_ctrl("retention requested");
+#endif
 	} else {
 		printf("Retained data not supported\n");
 	}
@@ -131,6 +196,38 @@ int main(void)
 	comparator_set_trigger(comp_dev, COMPARATOR_TRIGGER_BOTH_EDGES);
 	comparator_trigger_is_pending(comp_dev);
 	printf("Entering system off; change signal level at comparator input to restart\n");
+#endif
+
+#if defined(CONFIG_APP_POWER_DOWN_RAM)
+	/* System ON demo: power down unused RAM. In a TF-M build this is routed
+	 * to the secure RAM-control service. Verify via a debugger read of
+	 * MEMCONF.POWER[0].CONTROL (0x500CF500) after this call.
+	 */
+	printf("Powering down unused RAM (System ON)\n");
+#if defined(CONFIG_BUILD_WITH_TFM)
+	dump_ram_ctrl("before power-down");
+#endif
+	power_down_unused_ram();
+#if defined(CONFIG_BUILD_WITH_TFM)
+	dump_ram_ctrl("after power-down");
+#endif
+#endif
+
+#if defined(CONFIG_APP_RETAIN_RAM) && defined(CONFIG_BUILD_WITH_TFM)
+	/* System OFF retention demo: request retention for one NS section via the
+	 * secure service and observe the plan with the dump. The default is "retain
+	 * nothing"; only the requested section is re-enabled at System OFF. Stay
+	 * within the NS grant; section 6 (0x20030000) is fully NS-owned.
+	 */
+	printf("Requesting System OFF retention for section 6\n");
+	dump_ram_ctrl("before retention request");
+	int r1 = nrf_ram_ctrl_svc_retention_set(0x20030000, 0x8000, true); /* retain sec6 */
+
+	printf("retention_set: retain sec6 rc=%d\n", r1);
+	/* PLANNED should now show bit 6 set and nothing else - i.e. ONLY section 6
+	 * survives System OFF, every other section is dropped to save power.
+	 */
+	dump_ram_ctrl("after retention request");
 #endif
 
 	rc = pm_device_action_run(cons, PM_DEVICE_ACTION_SUSPEND);

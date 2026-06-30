@@ -5,7 +5,37 @@ mainmenu "Nordic SYSTEM_OFF demo"
 
 config APP_USE_RETAINED_MEM
 	bool "Use state retention in system off using retained_mem driver"
-	select RETAINED_MEM
+	select RETAINED_MEM if !APP_RETAINED_NOINIT
+
+config APP_RETAINED_NOINIT
+	bool "Store retained state in a .noinit variable inside sram0_ns"
+	depends on APP_USE_RETAINED_MEM
+	help
+	  Instead of a retained_mem region carved ABOVE the kernel SRAM, keep the
+	  retained state in a __noinit variable inside sram0_ns. Required for
+	  non-secure (TF-M) builds: a region carved above sram0_ns falls outside
+	  the kernel's MPU coverage and faults when the NS app accesses it, whereas
+	  a .noinit variable lives inside that coverage. Retention across System OFF
+	  is provided by the secure RAM-control service keeping the section retained.
+
+config APP_POWER_DOWN_RAM
+	bool "Power down unused RAM in System ON (via ram_pwrdn)"
+	select RAM_POWER_DOWN_LIBRARY
+	help
+	  Demonstrate System ON RAM power-down through the ram_pwrdn library
+	  (routed to the secure RAM-control service in a TF-M build). Do not
+	  combine with APP_USE_RETAINED_MEM on the same boot: powering a region
+	  down clears its CONTROL bit, which also disables System OFF retention
+	  for that region (retention = CONTROL AND RET).
+
+config APP_RETAIN_RAM
+	bool "Configure System OFF RAM retention (RET) via the secure service"
+	help
+	  Demonstrate System OFF RAM retention configuration: in a TF-M build,
+	  the non-secure app calls the secure RAM-control service to set MEMCONF
+	  RET for chosen non-secure RAM sections, and dumps the registers to
+	  confirm. This exercises the RET path WITHOUT reading the retained
+	  region itself (separate concern). TF-M (/ns) only.
 
 config GPIO_WAKEUP_ENABLE
 	bool "Use button to wake up device from system off"
