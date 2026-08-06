@@ -5,9 +5,9 @@
  */
 
 / {
-	cpuapp_sram@2002e000 {
+	retained_ram: memory@20020000 {
 		compatible = "zephyr,memory-region", "mmio-sram";
-		reg = <0x2002e000 DT_SIZE_K(4)>;
+		reg = <0x20020000 DT_SIZE_K(64)>;
 		zephyr,memory-region = "RetainedMem";
 		status = "okay";
 
@@ -23,7 +23,11 @@
 };
 
 &cpuapp_sram {
-	/* Shrink SRAM size to avoid overlap with retained memory region */
-	reg = <0x20000000 DT_SIZE_K(184)>;
-	ranges = <0x0 0x20000000 0x2e000>;
+	/* Reserve two aligned 32 KiB sections for the retention test. */
+	reg = <0x20000000 DT_SIZE_K(128)>;
+	ranges = <0x0 0x20000000 DT_SIZE_K(128)>;
+};
+
+&gpio4 {
+	gpiote-instance = <&gpiote20>;
 };

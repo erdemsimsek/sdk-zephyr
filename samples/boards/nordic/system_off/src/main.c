@@ -19,6 +19,10 @@
 #include <zephyr/sys/util.h>
 #include <zephyr/drivers/timer/system_timer.h>
 
+#if defined(CONFIG_SOC_NRF7120_ENGA_CPUAPP)
+#include <hal/nrf_memconf.h>
+#endif
+
 #define NON_WAKEUP_RESET_REASON (RESET_PIN | RESET_SOFTWARE | RESET_POR | RESET_DEBUG)
 
 #if defined(CONFIG_GRTC_WAKEUP_ENABLE)
@@ -30,6 +34,29 @@ static const struct gpio_dt_spec sw0 = GPIO_DT_SPEC_GET(DT_ALIAS(sw0), gpios);
 #endif
 #if defined(CONFIG_LPCOMP_WAKEUP_ENABLE)
 static const struct device *comp_dev = DEVICE_DT_GET(DT_NODELABEL(comp));
+#endif
+
+#if defined(CONFIG_SOC_NRF7120_ENGA_CPUAPP)
+static void ram_retention_verify_disabled(void)
+{
+	uint32_t ret;
+	uint32_t ret2;
+
+	if (IS_ENABLED(CONFIG_APP_USE_RETAINED_MEM)) {
+		return;
+	}
+
+	ret = NRF_MEMCONF->POWER[0].RET;
+	ret2 = NRF_MEMCONF->POWER[0].RET2;
+
+	printf("MEMCONF RET before System OFF:  0x%08" PRIx32 "\n", ret);
+	printf("MEMCONF RET2 before System OFF: 0x%08" PRIx32 "\n", ret2);
+
+	if ((ret != 0U) || (ret2 != 0U)) {
+		printf("Unexpected RAM retention in no-retention build\n");
+		k_panic();
+	}
+}
 #endif
 
 int print_reset_cause(uint32_t reset_cause)
@@ -64,7 +91,7 @@ int main(void)
 
 	if (!device_is_ready(cons)) {
 		printf("%s: device not ready.\n", cons->name);
-		return 0;
+		/* return 0; */
 	}
 
 	printf("\n%s system off demo\n", CONFIG_BOARD);
@@ -73,7 +100,7 @@ int main(void)
 
 	if (rc < 0) {
 		printf("Reset cause not supported.\n");
-		return 0;
+		/* return 0; */
 	}
 
 	if (IS_ENABLED(CONFIG_APP_USE_RETAINED_MEM)) {
@@ -106,7 +133,7 @@ int main(void)
 
 	if (err < 0) {
 		printk("Unable to prepare GRTC as a wake up source (err = %d).\n", err);
-		return 0;
+		/* return 0; */
 	} else {
 		printk("Entering system off; wait %u seconds to restart\n", DEEP_SLEEP_TIME_S);
 	}
@@ -116,13 +143,13 @@ int main(void)
 	rc = gpio_pin_configure_dt(&sw0, GPIO_INPUT);
 	if (rc < 0) {
 		printf("Could not configure sw0 GPIO (%d)\n", rc);
-		return 0;
+		/* return 0; */
 	}
 
 	rc = gpio_pin_interrupt_configure_dt(&sw0, GPIO_INT_LEVEL_ACTIVE);
 	if (rc < 0) {
 		printf("Could not configure sw0 GPIO interrupt (%d)\n", rc);
-		return 0;
+		/* return 0; */
 	}
 
 	printf("Entering system off; press sw0 to restart\n");
@@ -133,10 +160,14 @@ int main(void)
 	printf("Entering system off; change signal level at comparator input to restart\n");
 #endif
 
+#if defined(CONFIG_SOC_NRF7120_ENGA_CPUAPP)
+	ram_retention_verify_disabled();
+#endif
+
 	rc = pm_device_action_run(cons, PM_DEVICE_ACTION_SUSPEND);
 	if (rc < 0) {
 		printf("Could not suspend console (%d)\n", rc);
-		return 0;
+		/* return 0; */
 	}
 
 	if (IS_ENABLED(CONFIG_APP_USE_RETAINED_MEM)) {
