@@ -32,6 +32,26 @@ static const struct gpio_dt_spec sw0 = GPIO_DT_SPEC_GET(DT_ALIAS(sw0), gpios);
 static const struct device *comp_dev = DEVICE_DT_GET(DT_NODELABEL(comp));
 #endif
 
+#if defined(CONFIG_SOC_SERIES_NRF71) && !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)
+#include <hal/nrf_memconf.h>
+
+static void memconf_print(const char *when)
+{
+	printf("MEMCONF @ 0x%08x (%s)\n", (uint32_t)(uintptr_t)NRF_MEMCONF, when);
+
+	for (uint8_t i = 0; i < NRF_MEMCONF_POWERBLOCK_COUNT; i++) {
+		printf("MEMCONF POWER[%u] CONTROL=0x%08x RET=0x%08x RET2=0x%08x\n",
+		       i, NRF_MEMCONF->POWER[i].CONTROL, NRF_MEMCONF->POWER[i].RET,
+		       NRF_MEMCONF->POWER[i].RET2);
+	}
+}
+#else
+static inline void memconf_print(const char *when)
+{
+	ARG_UNUSED(when);
+}
+#endif
+
 int print_reset_cause(uint32_t reset_cause)
 {
 	int32_t ret;
@@ -75,6 +95,8 @@ int main(void)
 		printf("Reset cause not supported.\n");
 		return 0;
 	}
+
+	memconf_print("at boot");
 
 	if (IS_ENABLED(CONFIG_APP_USE_RETAINED_MEM)) {
 		bool retained_ok = retained_validate();
@@ -132,6 +154,8 @@ int main(void)
 	comparator_trigger_is_pending(comp_dev);
 	printf("Entering system off; change signal level at comparator input to restart\n");
 #endif
+
+	memconf_print("before system off");
 
 	rc = pm_device_action_run(cons, PM_DEVICE_ACTION_SUSPEND);
 	if (rc < 0) {
