@@ -23,7 +23,8 @@
 
 #if defined(CONFIG_GRTC_WAKEUP_ENABLE)
 #include <zephyr/drivers/timer/nrf_grtc_timer.h>
-#define DEEP_SLEEP_TIME_S 2
+#define DEEP_SLEEP_TIME_S 15
+#define GRTC_POST_WAKE_DELAY_S 5
 #endif
 #if defined(CONFIG_GPIO_WAKEUP_ENABLE)
 static const struct gpio_dt_spec sw0 = GPIO_DT_SPEC_GET(DT_ALIAS(sw0), gpios);
@@ -97,6 +98,15 @@ int main(void)
 	} else {
 		printf("Retained data not supported\n");
 	}
+
+#if defined(CONFIG_GRTC_WAKEUP_ENABLE)
+	if (reset_cause & RESET_CLOCK) {
+		printf("Waiting %u seconds for debug access to finish\n",
+		       GRTC_POST_WAKE_DELAY_S);
+		k_sleep(K_SECONDS(GRTC_POST_WAKE_DELAY_S));
+		printf("Post-wake delay complete\n");
+	}
+#endif
 
 #if defined(CONFIG_SYS_CLOCK_DISABLE)
 	printf("System clock will be disabled\n");
