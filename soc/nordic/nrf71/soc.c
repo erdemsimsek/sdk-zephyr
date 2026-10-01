@@ -302,12 +302,6 @@ int nordicsemi_nrf71_init(void)
 #else
 	NRF_P4->PWRCTRL = P4_PWRCTRL_3V3;
 #endif
-
-	/* Configure LFXO capacitive load if internal load capacitors are used */
-#if DT_ENUM_HAS_VALUE(LFXO_NODE, load_capacitors, internal)
-	nrf_lfxo_cload_set(LFXO_REG,
-			(uint8_t)(DT_PROP(LFXO_NODE, load_capacitance_femtofarad) / 1000));
-#endif
 #endif /* (NRF_APPLICATION && !CONFIG_TRUSTED_EXECUTION_NONSECURE) || !__ZEPHYR__  */
 
 #ifdef __ZEPHYR__
