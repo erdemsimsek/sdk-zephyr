@@ -5,11 +5,16 @@
 '''Runner for flashing with nrfutil.'''
 
 import json
+import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 from runners.nrf_common import NrfBinaryRunner
+
+# nrfutil error reported when it cannot reach the SWD debug port.
+DP_UNREACHABLE_MSG = 'debug port SELECT register failed'
 
 
 class NrfUtilBinaryRunner(NrfBinaryRunner):
@@ -89,7 +94,8 @@ class NrfUtilBinaryRunner(NrfBinaryRunner):
                             self.logger.info(pld['data']['progress']['description'])
                     elif jout['type'] == 'batch_end' and jout['data']['error']:
                         raise subprocess.CalledProcessError(
-                            jout['data']['error']['code'], cmd
+                            jout['data']['error']['code'], cmd,
+                            output=jout['data'].get('message', '')
                         )
         if p.returncode != 0:
             raise subprocess.CalledProcessError(p.returncode, cmd)
@@ -166,8 +172,54 @@ class NrfUtilBinaryRunner(NrfBinaryRunner):
             # This needs to be prepended, as it's a global option
             precmd = ['--x-ext-mem-config-file', self.ext_mem_config_file]
 
-        self._exec(precmd + ['x-execute-batch', '--batch-path', f'{json_file}',
-                             '--serial-number', self._format_dev_ids()])
+        batch_cmd = precmd + ['x-execute-batch', '--batch-path', f'{json_file}',
+                              '--serial-number', self._format_dev_ids()]
+        try:
+            self._exec(batch_cmd)
+        except subprocess.CalledProcessError as e:
+            if not (self.family == 'nrf71' and DP_UNREACHABLE_MSG in str(e.output or '')
+                    and self._wake_debug_port()):
+                raise
+            self.logger.info('Debug port reachable again, retrying')
+            self._exec(batch_cmd)
+
+    def _wake_debug_port(self):
+        '''Make the nRF71 SWD debug port reachable for nrfutil again.
+
+        When the firmware leaves an nRF71 SoC in System ON idle with no
+        peripheral active, nrfutil can no longer reach the SWD debug port,
+        and every pin reset boots straight back into that state.
+        A J-Link Commander connect still gets through: it resets the target
+        and keeps the debug domain powered.
+        Returns True if a connect was attempted for every device.
+        '''
+        from runners.jlink import JLinkBinaryRunner
+
+        JLinkBinaryRunner.default_jlink()
+        from runners.jlink import DEFAULT_JLINK_EXE
+
+        jlink = shutil.which(str(DEFAULT_JLINK_EXE))
+        if jlink is None:
+            self.logger.warning('nRF71 debug port unreachable and J-Link Commander '
+                                f'({DEFAULT_JLINK_EXE}) not found, cannot recover')
+            return False
+
+        dev_ids = self.dev_id if isinstance(self.dev_id, list) else [self.dev_id]
+        if not all(dev_ids):
+            return False
+
+        self.logger.warning('nRF71 debug port unreachable, waking it with J-Link Commander')
+        with tempfile.TemporaryDirectory(suffix='nrfutil') as d:
+            script = Path(d) / 'connect.jlink'
+            script.write_text('connect\nq\n')
+            for dev_id in dev_ids:
+                cmd = [jlink, '-USB', dev_id, '-device', 'cortex-m33', '-if', 'SWD',
+                       '-speed', '1000', '-autoconnect', '1', '-NoGui', '1',
+                       '-CommandFile', str(script)]
+                self._log_cmd(cmd)
+                subprocess.run(cmd, stdout=subprocess.DEVNULL,
+                               stderr=subprocess.DEVNULL, check=False)
+        return True
 
     def do_exec_op(self, op, force=False):
         self.logger.debug(f'Executing op: {op}')
