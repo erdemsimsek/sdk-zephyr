@@ -97,6 +97,11 @@ ZTEST(nrf_lf_clock_start, test_wait_in_thread)
 	}
 #endif
 
+	if (IS_ENABLED(CONFIG_SOC_SERIES_NRF71)) {
+		/* LFXO is already running from XTAL about 1 ms after start. */
+		ztest_test_skip();
+	}
+
 	z_nrf_clock_control_lf_on(CLOCK_CONTROL_NRF_LF_START_AVAILABLE);
 #if defined(CONFIG_CLOCK_CONTROL_NRF)
 	o = nrf_clock_is_running(NRF_CLOCK, NRF_CLOCK_DOMAIN_LFCLK, &t);
