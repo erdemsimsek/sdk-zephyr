@@ -23,5 +23,5 @@
 };
 
 &cpuapp_sram_app {
-	reg = <0x60 (DT_SIZE_K(184) - 0x60)>;
+	reg = <NRF7120_SRAM_APP_START (DT_SIZE_K(184) - NRF7120_SRAM_APP_START)>;
 };

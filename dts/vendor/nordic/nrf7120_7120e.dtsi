@@ -17,6 +17,11 @@
 #define NRF7120_CPUAPP_SRAM_SIZE  (DT_SIZE_K(1016) - NRF7120_RAM03_SHARED_SIZE)
 #define NRF7120_RAM03_USABLE_SIZE (DT_SIZE_K(120) - NRF7120_RAM03_SHARED_SIZE)
 
+#define NRF7120_KMU_PUSH_SIZE     0x60
+#define NRF7120_WIFI_IPC_SIZE     0x5000
+/* Start of cpuapp_sram_app, after the KMU push area and the Wi-Fi IPC shared memory */
+#define NRF7120_SRAM_APP_START    (NRF7120_KMU_PUSH_SIZE + NRF7120_WIFI_IPC_SIZE)
+
 /delete-node/ &sw_pwm;
 
 / {
@@ -115,7 +120,7 @@
 		 */
 		kmu_push_area: memory@20000000 {
 			compatible = "zephyr,memory-region", "mmio-sram";
-			reg = <0x20000000 0x60>;
+			reg = <0x20000000 NRF7120_KMU_PUSH_SIZE>;
 			zephyr,memory-region = "KMU_PUSH";
 		};
 #endif
@@ -244,9 +249,18 @@
 				};
 
 #ifndef USE_NON_SECURE_ADDRESS_MAP
-				cpuapp_sram_app: memory@60 {
+				ipc_shm_area_cpuapp_cpuuma: memory@60 {
 					compatible = "mmio-sram";
-					reg = <0x60 (NRF7120_CPUAPP_SRAM_SIZE - 0x60)>;
+					reg = <NRF7120_KMU_PUSH_SIZE NRF7120_WIFI_IPC_SIZE>;
+					ranges = <0x0 NRF7120_KMU_PUSH_SIZE NRF7120_WIFI_IPC_SIZE>;
+					#address-cells = <1>;
+					#size-cells = <1>;
+				};
+
+				cpuapp_sram_app: memory@5060 {
+					compatible = "mmio-sram";
+					reg = <NRF7120_SRAM_APP_START
+					       (NRF7120_CPUAPP_SRAM_SIZE - NRF7120_SRAM_APP_START)>;
 				};
 #endif
 			};
