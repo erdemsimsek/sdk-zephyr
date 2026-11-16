@@ -62,7 +62,8 @@
 #define EXTFLASH_SIZE	DT_PROP_OR(EXTFLASH_NODE, size_in_bytes, \
 				   DT_PROP(EXTFLASH_NODE, size) / 8)
 
-#elif defined(CONFIG_FLASH_MSPI_NOR) && defined(CONFIG_SOC_NRF7120_CPUAPP)
+#elif defined(CONFIG_FLASH_MSPI_NOR) && \
+	(defined(CONFIG_SOC_NRF7120_CPUAPP) || defined(CONFIG_SOC_NRF7120E_CPUAPP))
 
 /* Cached memory-mapped aperture used for execute-in-place. */
 #define EXTFLASH_NODE	DT_NODELABEL(memmap_aperture_cached)
