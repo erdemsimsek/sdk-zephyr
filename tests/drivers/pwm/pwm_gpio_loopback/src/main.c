@@ -132,7 +132,12 @@ static int check_timing(const struct pwm_dt_spec *pwm_dt, const struct gpio_dt_s
 	setup_edge_detect();
 
 	/* wait for sampling */
-	k_sleep(K_MSEC(CONFIG_SAMPLING_TIME));
+	if (IS_ENABLED(CONFIG_SOC_SERIES_NRF71)) {
+		/* Edge interrupt latency from idle exceeds the allowed deviation. */
+		k_busy_wait(CONFIG_SAMPLING_TIME * USEC_PER_MSEC);
+	} else {
+		k_sleep(K_MSEC(CONFIG_SAMPLING_TIME));
+	}
 
 	/* store pin state for duty == 100% or 0% checks */
 	pin_state = gpio_pin_get_dt(gpio_dt);
